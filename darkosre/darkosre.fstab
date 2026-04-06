@@ -1,0 +1,10 @@
+LABEL=darkosre       /  ext4  defaults,noatime  0 1
+
+LABEL=darkosreboot   /boot vfat defaults 0 2
+LABEL=boot          /boot/u-boot vfat defaults 0 2
+
+LABEL=EZSTORAGE     /EZSTORAGE  exfat defaults,auto,umask=000,uid=1002,gid=1002,noatime 0 0
+
+LABEL=EZSTORAGE2    /EZSTORAGE2 exfat defaults,umask=000,uid=1002,gid=1002,noatime,nofail,nobootwait,noauto,x-systemd.device-timeout=10 0 0
+
+##pre-firstrun##/roms/tools         /opt/system/Tools none nofail,x-systemd.device-timeout=7,bind

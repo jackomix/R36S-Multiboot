@@ -1,0 +1,15 @@
+[Unit]
+Description=EZStorage Setup
+Before=emulationstation.service
+
+[Service]
+Type=oneshot
+User=root
+Restart=no
+RemainAfterExit=yes
+WorkingDirectory=/boot/u-boot
+ExecStart=/bin/bash /usr/local/sbin/ez.sh
+ExecStop=/bin/bash /boot/u-boot/umount-ez.sh
+
+[Install]
+WantedBy=multi-user.target

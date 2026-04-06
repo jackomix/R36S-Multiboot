@@ -1,0 +1,11 @@
+{
+  "last_session_id": "e11807df-caed-4363-ac93-f89befc1eebe",
+  "last_event_key": "e11807df-caed-4363-ac93-f89befc1eebe:transcript:a95637f89b6f53fe16ed691b84701a069c8a0f625c63dfa40947eb6bfc56d49a",
+  "last_prompted_session_id": "e11807df-caed-4363-ac93-f89befc1eebe",
+  "last_reason": "already-prompted-this-session",
+  "last_user_message_count": 14,
+  "last_actionable_message_count": 9,
+  "deep_interview_lock_active": false,
+  "deep_interview_lock_source": "D:\\r36smultiboot\\.omg\\state\\deep-interview.json",
+  "updated_at": "2026-04-06T19:56:40.214Z"
+}

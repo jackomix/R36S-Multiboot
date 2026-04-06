@@ -34,7 +34,7 @@ Hold the function button with a face button for sticky boot, that os becomes the
 #  Left       =   PAN4ELEC
 
 #  A (east)   =   Andr36oid
-#  B (south)  =   <Empty>
+#  B (south)  =   dArkOSRE R36
 #  X (north)  =   LinuX (Armbian Bookworm/Jammy/Noble/Plucky)
 #  Y (west)   =   <Empty>
 

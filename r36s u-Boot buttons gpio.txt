@@ -35,7 +35,7 @@
 # d12   Start (+)  =   ArkOS
 # d9    Select (-) =   <Empty>
 
-# b5    B (south)  =   <Empty>
+# b5    B (south)  =   dArkOSRE R36
 # b6    Y (west)   =   <Empty>
 # b7    X (north)  =   LinuX (Armbian Bookworm/Jammy/Noble/Plucky)
 # b2    A (east)   =   Andr36oid

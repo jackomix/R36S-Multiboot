@@ -1,25 +1,138 @@
 #!/bin/bash
 [[ "$ghdebug" == "true" ]] && set -x
 
-# amberelec ark pan4elec rocknix uos bookworm jammy noble plucky
-
-if [[ "$1" == "testoses" ]]
-then
-    for i in amberelec ark pan4elec rocknix uos
-    do
-        ./buildimg.sh "$i" || exit 1
-        sleep 5
+function check_deps {
+    local DEPS_MISSING=0
+    for cmd in aria2c whiptail jq parted; do
+        if ! command -v $cmd >/dev/null 2>&1; then
+            echo "Missing dependency: $cmd"
+            DEPS_MISSING=1
+        fi
     done
-    exit 0
-fi
+    
+    if [[ $DEPS_MISSING -eq 1 ]]; then
+        echo "Attempting to install missing dependencies..."
+        if command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y aria2 whiptail jq parted p7zip-full
+        else
+            echo "Please manually install the missing dependencies: aria2, whiptail, jq, parted, p7zip"
+            exit 1
+        fi
+    fi
+
+    # WSL Loop Device check/init
+    if [[ ! -e /dev/loop0 ]]; then
+        echo "Initializing loop devices for WSL..."
+        sudo modprobe loop 2>/dev/null || true
+        for i in {0..7}; do
+            if [[ ! -e /dev/loop$i ]]; then
+                sudo mknod /dev/loop$i b 7 $i 2>/dev/null || true
+            fi
+        done
+    fi
+
+    # Check for Windows-mounted drive (DrvFs)
+    if pwd | grep -q "^/mnt/"; then
+        echo -e "\e[1;33mWarning: You are running this from a Windows-mounted drive (/mnt/...). \e[0m"
+        echo -e "\e[1;33mLoop devices in WSL often fail on NTFS/FAT drives with 'No such device or address'.\e[0m"
+        echo -e "\e[1;33mIf this fails, please move the project to your Linux home directory (e.g., ~/r36smultiboot).\e[0m"
+        echo
+    fi
+}
+
+check_deps
 
 function say {
     echo
-    echo $@
+    echo -e "\e[1;32m$@\e[0m"
 }
 function sayin {
-    echo ► $@
+    echo -e "\e[1;34m► $@\e[0m"
 }
+
+# --- TUI Configuration Phase ---
+
+# Find available OSes (directories with get-image.sh or bootbutton)
+AVAILABLE_OSES=()
+for d in */ ; do
+    if [[ -f "${d}get-image.sh" || -f "${d}bootbutton" ]]; then
+        OS_NAME=$(basename "$d")
+        AVAILABLE_OSES+=("$OS_NAME")
+    fi
+done
+
+if [[ "$1" == "testoses" ]]; then
+    SELECTED_OSES=("amberelec" "ark" "pan4elec" "rocknix" "uos")
+elif [[ $# -gt 0 ]]; then
+    SELECTED_OSES=("$@")
+elif [[ ! -t 0 ]]; then
+    # Non-interactive terminal with no args: default to standard OSes
+    SELECTED_OSES=("andr36oid" "darkosre")
+else
+    # Whiptail Checklist for OS Selection
+    CHECKLIST_ARGS=()
+    for os in "${AVAILABLE_OSES[@]}"; do
+        CHECKLIST_ARGS+=("$os" "Include $os" "OFF")
+    done
+
+    SELECTED_CSV=$(whiptail --title "R36S Multiboot Builder" \
+        --checklist "Select the OSes to include in the image:" 20 60 12 \
+        "${CHECKLIST_ARGS[@]}" 3>&1 1>&2 2>&3)
+
+    if [[ -z "$SELECTED_CSV" ]]; then
+        echo "No OS selected. Exiting."
+        exit 0
+    fi
+    # Parse CSV into array (whiptail returns "os1" "os2")
+    eval "SELECTED_OSES=($SELECTED_CSV)"
+fi
+
+# Define available buttons
+BUTTONS=(
+    "b12" "Up"
+    "b13" "Down"
+    "b15" "Right"
+    "b14" "Left"
+    "b7" "X (North)"
+    "b6" "Y (West)"
+    "b2" "A (East)"
+    "b5" "B (South)"
+    "d12" "Start (+)"
+    "d9" "Select (-)"
+)
+
+# Configuration Phase for Buttons
+if [[ $# -eq 0 && "$1" != "testoses" && -t 0 ]]; then
+    for os in "${SELECTED_OSES[@]}"; do
+        # Current button
+        CURRENT_BTN="b7"
+        if [[ -f "$os/bootbutton" ]]; then
+            CURRENT_BTN=$(cat "$os/bootbutton" | tr -d '\r\n ')
+        fi
+
+        MENU_ARGS=()
+        for ((i=0; i<${#BUTTONS[@]}; i+=2)); do
+            if [[ "${BUTTONS[i]}" == "$CURRENT_BTN" ]]; then
+                MENU_ARGS+=("${BUTTONS[i]}" "${BUTTONS[i+1]}" "ON")
+            else
+                MENU_ARGS+=("${BUTTONS[i]}" "${BUTTONS[i+1]}" "OFF")
+            fi
+        done
+
+        SELECTED_BTN=$(whiptail --title "Button Configuration" \
+            --radiolist "Select boot button for $os:" 20 60 12 \
+            "${MENU_ARGS[@]}" 3>&1 1>&2 2>&3)
+
+        if [[ -n "$SELECTED_BTN" ]]; then
+            echo "$SELECTED_BTN" | tr -d '"\r\n' > "$os/bootbutton"
+        fi
+    done
+fi
+
+say "Building image with OSes: ${SELECTED_OSES[@]}"
+
+# --- Build Phase ---
 
 u=$(id -u)
 g=$(id -g)
@@ -31,16 +144,16 @@ BuildingImgFullPath=${StartDir}/building.img
 
 for mp in $(mount | grep "$(pwd)" |cut -d' ' -f1)
 do
-    sudo umount "${mp}" && echo ${mp} was stll mounted || exit 1
+    sudo umount "${mp}" && echo "${mp} was still mounted" || exit 1
 done
 
 [[ -d tmp ]] && rm -rf tmp || true
 [[ -d tmp ]] && exit 1
 
-for ld in $(losetup | grep "$(pwd)" |cut -d' ' -f1)
+for ld in $(sudo losetup -a | grep "$(pwd)" |cut -d: -f1)
 do
     echo
-    sudo losetup -d ${ld} && echo ${ld} was stll attached to an image || exit 1
+    sudo losetup -d ${ld} && echo "${ld} was still attached to an image" || exit 1
 done
 
 mkdir tmp
@@ -54,26 +167,22 @@ storagesize=24
 # shrink armbian sizes if building the big one
 if [[ "$BuildImgEnv" == "github" ]]
 then
-    if [[ "$@" == *"bookworm jammy noble pluck"* ]] # anticipate never-ending ubuntu releases
-    then
+    if echo "${SELECTED_OSES[@]}" | grep -qE "bookworm|jammy|noble|pluck"; then
         say "Building the big one, reducing size requirements"
-        # jammy+/sizereq is currently a symlink to bookworm/sizereq
-        # so we can just change bookworm/sizereq
         echo 5120 > bookworm/sizereq
-        #echo 512 > amberelec/sizereq
     fi
 fi
 
-for arg in "$@"; do
+for arg in "${SELECTED_OSES[@]}"; do
     thissizereq=0
     if [[ -f "$arg/bootsizereq" ]]
     then
-        thissizereq=$(cat "$arg/bootsizereq")
+        thissizereq=$(cat "$arg/bootsizereq" | tr -d '\r\n ')
         imgsizereq=$((imgsizereq + thissizereq))
     fi
     if [[ -f "$arg/sizereq" ]]
     then
-        thissizereq=$(cat "$arg/sizereq")
+        thissizereq=$(cat "$arg/sizereq" | tr -d '\r\n ')
         imgsizereq=$((imgsizereq + thissizereq))
     fi
 done
@@ -81,35 +190,37 @@ done
 imgsizereq=$((storagesize + imgsizereq))
 imgsize=$((bootsize + imgsizereq + 16))
 
-echo imgsize is $imgsize
-echo bootsize is $bootsize
+echo "imgsize is $imgsize"
+echo "bootsize is $bootsize"
 
 set -e
 
-say make base image ${imgsize}MiB
-ImgLodev=$(losetup -f)
+say "make base image ${imgsize}MiB"
 
 fallocate -l ${imgsize}MiB ${BuildingImgFullPath}
 
-sudo losetup -P ${ImgLodev} ${BuildingImgFullPath}
+# Use --show to get the device name while attaching
+ImgLodev=$(sudo losetup -f --show -P ${BuildingImgFullPath})
+echo "Attached to $ImgLodev"
 
 function refreshBuildimg {
     sync
-    echo ► refresh ${ImgLodev}
-    [[ ! -z "${ImgBootMnt}" ]] && echo ►► umount "${ImgBootMnt}" || true
+    echo "► refresh ${ImgLodev}"
+    [[ ! -z "${ImgBootMnt}" ]] && echo "►► umount ${ImgBootMnt}" || true
     [[ ! -z "${ImgBootMnt}" ]] && sudo umount "${ImgBootMnt}" || true
     sudo losetup -d ${ImgLodev}
     sleep 3
     sync
-    sudo losetup -P ${ImgLodev} ${BuildingImgFullPath}
+    # Re-attach to the SAME loop device if possible, or get a new one
+    ImgLodev=$(sudo losetup -f --show -P ${BuildingImgFullPath})
     sleep 3
-    [[ ! -z "${ImgBootMnt}" ]] && echo ►► mount ${ImgLodev}p1 "${ImgBootMnt}" || true
+    [[ ! -z "${ImgBootMnt}" ]] && echo "►► mount ${ImgLodev}p1 ${ImgBootMnt}" || true
     [[ ! -z "${ImgBootMnt}" ]] && sudo mount ${ImgLodev}p1 "${ImgBootMnt}" || true
 }
 
 if [[ ! -d u-boot ]]
 then
-    say get u-boot
+    say "get u-boot"
     mkdir u-boot
     cd u-boot
     wget https://github.com/R36S-Stuff/R36S-u-boot-builder/releases/download/v1/u-boot-r36s.tar
@@ -118,9 +229,10 @@ fi
 cd u-boot
 if [[ ! -f u-boot-r36s.tar ]]
 then
+    echo "u-boot-r36s.tar not found!"
     exit 1
 fi
-say add uboot
+say "add uboot"
 if [[ ! -d "sd_fuse" ]]
 then
     mkdir sd_fuse
@@ -131,15 +243,15 @@ chmod a+x ./sd_fusing.sh
 ./sd_fusing.sh ${ImgLodev} >/dev/null 2>&1
 cd "${StartDir}"
 
-say create partition table
-sudo parted -s ${ImgLodev} mklabel msdos #|| echo
+say "create partition table"
+sudo parted -s ${ImgLodev} mklabel msdos
 
 function newpart {
     local start=$nextpartstart
     local partsize=$1
     local end=$((start + partsize))
     local ptype=notset
-    echo ► create from ${start}MiB to ${end}MiB
+    echo "► create from ${start}MiB to ${end}MiB"
     [[ "$2" == "fat" ]] && local type=fat32 || true
     [[ "$2" == "ext4" ]] && local type=ext4 || true
     [[ "$2" == "exfat" ]] && local type=fat32 || true
@@ -155,12 +267,10 @@ function newpart {
     then
         if [[ -z "$3" ]]
         then
-            #echo
-            echo ► format as fat
+            echo "► format as fat"
             sudo mkfs.vfat -F 32 ${ImgLodev}p${partcount} >/dev/null 2>&1
         else
-            #echo
-            echo ► format as fat with label $3
+            echo "► format as fat with label $3"
             sudo mkfs.vfat -F 32 -n $3 ${ImgLodev}p${partcount} >/dev/null 2>&1
         fi
     fi
@@ -169,12 +279,10 @@ function newpart {
     then
         if [[ -z "$3" ]]
         then
-            #echo
-            echo ► format as exfat
+            echo "► format as exfat"
             sudo mkfs.exfat ${ImgLodev}p${partcount} >/dev/null 2>&1
         else
-            #echo
-            echo ► format as fat with label $3
+            echo "► format as exfat with label $3"
             sudo mkfs.exfat -L $3 ${ImgLodev}p${partcount} >/dev/null 2>&1
         fi
     fi
@@ -183,12 +291,10 @@ function newpart {
     then
         if [[ -z "$3" ]]
         then
-            #echo
-            echo ► format as ext4
+            echo "► format as ext4"
             sudo mkfs.ext4 ${ImgLodev}p${partcount} >/dev/null 2>&1
         else
-            #echo
-            echo ► format as ext4 with label $3
+            echo "► format as ext4 with label $3"
             sudo mkfs.ext4 -L $3 ${ImgLodev}p${partcount} >/dev/null 2>&1
         fi
     fi
@@ -196,18 +302,15 @@ function newpart {
     [[ "$3" == "returndev" ]] && return "${ImgLodev}p${partcount}" || true
 }
 
-say create boot partition
+say "create boot partition"
 newpart ${bootsize} fat boot
 ImgBootMnt="${StartDir}/tmp/boot.tmpmnt"
 mkdir -p "${ImgBootMnt}"
 sudo mount ${ImgLodev}p${partcount} "${ImgBootMnt}"
 sleep 3
 
-say fill boot partition
+say "fill boot partition"
 sudo cp -R commonbootfiles/* "${ImgBootMnt}"
-
-## Build tar.xz
-# tar --exclude="*/gb/*.zip" --exclude="*/bios/*" --exclude="*/00_*/*" --exclude="*/n64/*.zip" -c EZStorage_all > EZStorage_all.tar
 
 sudo cp "${StartDir}/EZ/EZStorage_all.tar" "${ImgBootMnt}/EZStorage_all.tar"
 sudo cp "${StartDir}/EZ/setup-ezstorage.sh" "${ImgBootMnt}/setup-ezstorage.sh"
@@ -218,20 +321,22 @@ function bootiniadd {
 
 bootiniadd odroidgoa-uboot-config
 bootiniadd ""
-bootiniadd setenv boot2 $1
+bootiniadd "setenv boot2 ${SELECTED_OSES[0]}"
 bootiniadd ""
 bootiniadd 'if env exist Stickyboot2'
 bootiniadd 'then'
 bootiniadd '    setenv boot2 ${Stickyboot2}'
 bootiniadd 'fi'
 bootiniadd ""
-for arg in "$@"; do
-    thisbtn=$(cat $arg/bootbutton)
-    bootiniadd if gpio input $thisbtn
-    bootiniadd then
-    bootiniadd "    setenv boot2 $arg"
-    bootiniadd fi
-    bootiniadd ""
+for arg in "${SELECTED_OSES[@]}"; do
+    if [[ -f "$arg/bootbutton" ]]; then
+        thisbtn=$(cat "$arg/bootbutton")
+        bootiniadd "if gpio input $thisbtn"
+        bootiniadd "then"
+        bootiniadd "    setenv boot2 $arg"
+        bootiniadd "fi"
+        bootiniadd ""
+    fi
 done
 
 bootiniadd 'if gpio input c4'
@@ -254,13 +359,13 @@ epartstart=$nextpartstart
 while true
 do
     epartstart=$((epartstart+1))
-    sudo parted -s ${ImgLodev} mkpart extended $epartstart 100% 2>&1 | grep "The closest location we can manage is" >/dev/null 2>&1 && continue || echo epart at $epartstart
+    sudo parted -s ${ImgLodev} mkpart extended $epartstart 100% 2>&1 | grep "The closest location we can manage is" >/dev/null 2>&1 && continue || echo "epart at $epartstart"
     partcount=$((partcount+3))
     nextpartstart=$((nextpartstart+1))
     break
 done
 
-for arg in "$@"; do
+for arg in "${SELECTED_OSES[@]}"; do
     OsName=${arg}
     ThisImgName=${OsName}.img
 
@@ -273,12 +378,12 @@ for arg in "$@"; do
     for step in get-image pre-install install-os post-install
     do
         echo
-        [[ -f "./${step}.sh" ]] && echo Start: ${OsName}: ${step} || echo skipping ${step}...
+        [[ -f "./${step}.sh" ]] && echo "Start: ${OsName}: ${step}" || echo "skipping ${step}..."
         echo
-        [[ -f "./${step}.sh" ]] && echo source ./${step}.sh  || continue
+        [[ -f "./${step}.sh" ]] && echo "source ./${step}.sh"  || continue
         echo
         source ./${step}.sh
-        echo End: ${OsName}: ${step}
+        echo "End: ${OsName}: ${step}"
         echo
     done
     sync
@@ -286,24 +391,28 @@ for arg in "$@"; do
 done
 
 
-say create storage partition
+say "create storage partition"
 newpart 8 exfat EZSTORAGE
 Storagemount="${StartDir}/tmp/storage.tmpmnt"
 
-say finalize image
+say "finalize image"
 sync
 sudo umount "${ImgBootMnt}"
 [[ -d commonStoragefiles ]] && sudo umount "${Storagemount}" || true
 sudo losetup -d ${ImgLodev}
 sync
 
-[[ "$BuildImgEnv" == "github" ]] && OutImgNameNoExt=${imgname}-$(echo "$@" |sed 's| |-|g')-$GH_build_date || OutImgNameNoExt=${imgname}-$(echo "$@" |sed 's| |-|g')-$(TZ=America/New_York date +%Y-%m-%d-%H%M)
+if [[ "$BuildImgEnv" == "github" ]]; then
+    OutImgNameNoExt=${imgname}-$(echo "${SELECTED_OSES[@]}" |sed 's| |-|g')-$GH_build_date
+else
+    OutImgNameNoExt=${imgname}-$(echo "${SELECTED_OSES[@]}" |sed 's| |-|g')-$(TZ=America/New_York date +%Y-%m-%d-%H%M)
+fi
 
 OutImg=${StartDir}/${OutImgNameNoExt}.img
 OutImgXZ=${StartDir}/${OutImgNameNoExt}.img.xz
 OutImg7z=${StartDir}/${OutImgNameNoExt}.img.xz.7z
 
-echo ${OutImg}
+echo "${OutImg}"
 
 mv ${BuildingImgFullPath} ${OutImg}
 sync
@@ -311,9 +420,9 @@ sync
 if [[ "$BuildImgEnv" == "github" ]]
 then
     fallocate --dig-holes ${OutImg}
-    sayin comoressing with xz
+    sayin "compressing with xz"
     xz -z -7 -T0 ${OutImg}
-    sayin splitting with 7z
+    sayin "splitting with 7z"
     7z a -mx9 -md512m -mfb273 -mmt2 -v2000m ${OutImg7z} ${OutImgXZ}
     ls ${StartDir}/${imgname}-*
 fi

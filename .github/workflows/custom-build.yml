@@ -1,0 +1,55 @@
+name: Custom Multiboot Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      oses:
+        description: 'Space-separated list of OSes to include (e.g., andr36oid darkosre ark)'
+        required: true
+        default: 'andr36oid darkosre'
+      panel_num:
+        description: 'Default Panel Number (for PanCho.ini)'
+        required: true
+        default: '4'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aria2 whiptail jq parted p7zip-full xz-utils wget curl
+
+      - name: Prepare Workspace
+        run: |
+          chmod +x *.sh
+          # Ensure loop devices are initialized in the runner
+          sudo modprobe loop
+          for i in {0..7}; do
+            sudo mknod /dev/loop$i b 7 $i 2>/dev/null || true
+          done
+
+      - name: Set Panel Configuration
+        run: |
+          echo "PanelNum=${{ github.event.inputs.panel_num }}" > commonbootfiles/PanCho.ini
+
+      - name: Run Builder
+        env:
+          BuildImgEnv: github
+          GH_build_date: $(date +%Y%m%d)
+        run: |
+          # We pass the OSes as arguments to the script
+          sudo ./buildimg.sh ${{ github.event.inputs.oses }}
+
+      - name: Upload Image Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: R36S-Multiboot-Custom
+          path: |
+            *.img.xz*
+            *.img.7z*
+          retention-days: 5

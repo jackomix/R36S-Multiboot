@@ -4,7 +4,7 @@ repo="southoz/dArkOSRE-R36"
 release_body=$(curl -s "https://api.github.com/repos/${repo}/releases/latest" | jq -r '.body')
 torrent_url=$(echo "$release_body" | grep -oP '(?<=\[Torrent\]\().*?(?=\))' | head -n 1)
 mega_url=$(echo "$release_body" | grep -oP '(?<=\[Mega\]\().*?(?=\))' | head -n 1)
-gdrive_url=$(echo "$release_body" | grep -oP '(?<=\[Google Drive\]\().*?(?=\))' | head -n 1)
+gdrive_url=$(echo "$release_body" | grep -oP '(?<=\[(Google|Google Drive|GDrive|Mirror)\]\().*?(?=\))' | head -n 1)
 
 if [[ ! -f "${ThisImgName}" ]]
 then

@@ -3,21 +3,20 @@
 
 function check_deps {
     local DEPS_MISSING=0
-    for cmd in aria2c whiptail jq parted; do
+    for cmd in aria2c whiptail jq parted mkfs.exfat; do
         if ! command -v $cmd >/dev/null 2>&1; then
             echo "Missing dependency: $cmd"
             DEPS_MISSING=1
         fi
     done
-    
+
     if [[ $DEPS_MISSING -eq 1 ]]; then
         echo "Attempting to install missing dependencies..."
         if command -v apt-get >/dev/null 2>&1; then
             sudo apt-get update
-            sudo apt-get install -y aria2 whiptail jq parted p7zip-full xz-utils wget curl python3-pip megatools
-            pip3 install gdown
+            sudo apt-get install -y aria2 whiptail jq parted p7zip-full exfatprogs
         else
-            echo "Please manually install the missing dependencies: aria2, whiptail, jq, parted, p7zip"
+            echo "Please manually install the missing dependencies: aria2, whiptail, jq, parted, p7zip, exfatprogs"
             exit 1
         fi
     fi

@@ -22,7 +22,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y aria2 whiptail jq parted p7zip-full xz-utils wget curl python3-pip megatools exfatprogs kpartx
+          sudo apt-get install -y aria2 whiptail jq parted p7zip-full xz-utils wget curl python3-pip megatools exfatprogs kpartx pv
           pip3 install gdown
 
       - name: Prepare Workspace
@@ -39,10 +39,10 @@ jobs:
           echo "PanelNum=${{ github.event.inputs.panel_num }}" > commonbootfiles/PanCho.ini
 
       - name: Run Builder
-        env:
-          BuildImgEnv: github
-          GH_build_date: $(date +%Y%m%d)
         run: |
+          # Set the build date inside the step so it expands
+          export BuildImgEnv=github
+          export GH_build_date=$(date +%Y%m%d)
           # Use sudo -E to preserve environment variables for the script
           sudo -E ./buildimg.sh ${{ github.event.inputs.oses }}
           # Ensure artifacts are readable by the runner user

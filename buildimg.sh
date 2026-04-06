@@ -404,18 +404,21 @@ if [[ "$BuildImgEnv" == "github" ]]
 then
     fallocate --dig-holes "${OutImg}"
     echo "--- Compression Start: $(date) ---"
-    sayin "compressing with xz (fast mode, verbose progress)"
-    # Added -v for progress tracking in logs
-    xz -zv -1 -T0 "${OutImg}"
+    sayin "compressing with xz (fast mode, pv progress)"
+    # Use pv to show progress in logs. It shows throughput and percentage.
+    pv "${OutImg}" | xz -z -1 -T0 > "${OutImgXZ}"
+    # Remove raw img to save space in CI
+    rm "${OutImg}"
     echo "--- Compression End: $(date) ---"
 
     echo "--- Splitting Start: $(date) ---"
     sayin "splitting with 7z (store mode, verbose)"
-    # 7z outputs progress to stdout by default; removed any potential silencers
-    7z a -mx0 -v2000m "${OutImg7z}" "${OutImgXZ}"
+    # -bsp1 redirects progress to stdout for CI logs
+    7z a -mx0 -v2000m -bsp1 "${OutImg7z}" "${OutImgXZ}"
     echo "--- Splitting End: $(date) ---"
     
-    ls -lh "${StartDir}/${imgname}-*"
+    # List all generated files for verification
+    ls -lh "${StartDir}"/R36S-Multiboot-* || true
 fi
 
 sync

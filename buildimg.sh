@@ -14,7 +14,8 @@ function check_deps {
         echo "Attempting to install missing dependencies..."
         if command -v apt-get >/dev/null 2>&1; then
             sudo apt-get update
-            sudo apt-get install -y aria2 whiptail jq parted p7zip-full
+            sudo apt-get install -y aria2 whiptail jq parted p7zip-full xz-utils wget curl python3-pip megatools
+            pip3 install gdown
         else
             echo "Please manually install the missing dependencies: aria2, whiptail, jq, parted, p7zip"
             exit 1
@@ -205,17 +206,63 @@ echo "Attached to $ImgLodev"
 
 function refreshBuildimg {
     sync
-    echo "► refresh ${ImgLodev}"
-    [[ ! -z "${ImgBootMnt}" ]] && echo "►► umount ${ImgBootMnt}" || true
-    [[ ! -z "${ImgBootMnt}" ]] && sudo umount "${ImgBootMnt}" || true
-    sudo losetup -d ${ImgLodev}
-    sleep 3
+    echo "► refreshing partitions on ${ImgLodev}"
+    sudo partprobe "${ImgLodev}" || true
+    sudo udevadm settle || true
+    sleep 2
+}
+
+function newpart {
+    local start=$nextpartstart
+    local partsize=$1
+    local end=$((start + partsize))
+    local ptype=notset
+    echo "► create from ${start}MiB to ${end}MiB"
+    [[ "$2" == "fat" ]] && local type=fat32 || true
+    [[ "$2" == "ext4" ]] && local type=ext4 || true
+    [[ "$2" == "exfat" ]] && local type=fat32 || true
+
+    [[ $partcount == 0 ]] && ptype=primary || ptype=logical
+    sudo parted -s ${ImgLodev} mkpart $ptype $type ${start}MiB ${end}MiB || true
+    
+    refreshBuildimg
+    
+    # In MBR, logical partitions start at p5
+    local new_part_num=$((partcount + 1))
+    if [[ $ptype == "logical" && $new_part_num -lt 5 ]]; then
+        new_part_num=5
+    fi
+
+    # Wait for device
+    for i in {1..5}; do
+        if [[ -e "${ImgLodev}p${new_part_num}" ]]; then break; fi
+        sleep 1
+    done
+
+    partcount=${new_part_num}
+    local target_dev="${ImgLodev}p${partcount}"
+    nextpartstart=${end}
+    [[ "$ptype" == "logical" ]] && nextpartstart=$((nextpartstart+1)) || true
+
+    if [[ "$2" == "fat" ]]
+    then
+        echo "► format as fat with label ${3:-boot}"
+        sudo mkfs.vfat -F 32 ${3:+-n "$3"} "${target_dev}" >/dev/null 2>&1
+    fi
+
+    if [[ "$2" == "exfat" ]]
+    then
+        echo "► format as exfat with label ${3:-storage}"
+        sudo mkfs.exfat ${3:+-L "$3"} "${target_dev}" >/dev/null 2>&1
+    fi
+
+    if [[ "$2" == "ext4" ]]
+    then
+        echo "► format as ext4 with label ${3:-root}"
+        sudo mkfs.ext4 ${3:+-L "$3"} "${target_dev}" >/dev/null 2>&1
+    fi
     sync
-    # Re-attach to the SAME loop device if possible, or get a new one
-    ImgLodev=$(sudo losetup -f --show -P ${BuildingImgFullPath})
-    sleep 3
-    [[ ! -z "${ImgBootMnt}" ]] && echo "►► mount ${ImgLodev}p1 ${ImgBootMnt}" || true
-    [[ ! -z "${ImgBootMnt}" ]] && sudo mount ${ImgLodev}p1 "${ImgBootMnt}" || true
+    [[ "$3" == "returndev" ]] && return "${target_dev}" || true
 }
 
 if [[ ! -d u-boot ]]
@@ -245,62 +292,6 @@ cd "${StartDir}"
 
 say "create partition table"
 sudo parted -s ${ImgLodev} mklabel msdos
-
-function newpart {
-    local start=$nextpartstart
-    local partsize=$1
-    local end=$((start + partsize))
-    local ptype=notset
-    echo "► create from ${start}MiB to ${end}MiB"
-    [[ "$2" == "fat" ]] && local type=fat32 || true
-    [[ "$2" == "ext4" ]] && local type=ext4 || true
-    [[ "$2" == "exfat" ]] && local type=fat32 || true
-
-    [[ $partcount == 0 ]] && ptype=primary || ptype=logical
-    sudo parted -s ${ImgLodev} mkpart $ptype $type ${start}MiB ${end}MiB || true
-    refreshBuildimg
-    ls ${ImgLodev}p$((partcount + 1)) >/dev/null 2>&1 && partcount=$((partcount + 1)) || exit 1
-    nextpartstart=${end}
-    [[ "$ptype" == "logical" ]] && nextpartstart=$((nextpartstart+1)) || true
-
-    if [[ "$2" == "fat" ]]
-    then
-        if [[ -z "$3" ]]
-        then
-            echo "► format as fat"
-            sudo mkfs.vfat -F 32 ${ImgLodev}p${partcount} >/dev/null 2>&1
-        else
-            echo "► format as fat with label $3"
-            sudo mkfs.vfat -F 32 -n $3 ${ImgLodev}p${partcount} >/dev/null 2>&1
-        fi
-    fi
-
-    if [[ "$2" == "exfat" ]]
-    then
-        if [[ -z "$3" ]]
-        then
-            echo "► format as exfat"
-            sudo mkfs.exfat ${ImgLodev}p${partcount} >/dev/null 2>&1
-        else
-            echo "► format as exfat with label $3"
-            sudo mkfs.exfat -L $3 ${ImgLodev}p${partcount} >/dev/null 2>&1
-        fi
-    fi
-
-    if [[ "$2" == "ext4" ]]
-    then
-        if [[ -z "$3" ]]
-        then
-            echo "► format as ext4"
-            sudo mkfs.ext4 ${ImgLodev}p${partcount} >/dev/null 2>&1
-        else
-            echo "► format as ext4 with label $3"
-            sudo mkfs.ext4 -L $3 ${ImgLodev}p${partcount} >/dev/null 2>&1
-        fi
-    fi
-    sync
-    [[ "$3" == "returndev" ]] && return "${ImgLodev}p${partcount}" || true
-}
 
 say "create boot partition"
 newpart ${bootsize} fat boot

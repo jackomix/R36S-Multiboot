@@ -7,12 +7,13 @@ sayin new $((npsz/1024))GiB partition
 newpart $npsz fat ${OsName}boot
 ThisBootPartNum=${partcount}
 BootDev=${ImgLodev}p${ThisBootPartNum}
-sayin new dev is ${RootDev} 
+sayin new dev is ${BootDev} 
 
 npsz=$(cat sizereq)
 sayin new $((npsz/1024))GiB partition
 newpart $npsz ext4 $OsName
-RootDev=${ImgLodev}p${partcount}
+ThisRootPartNum=${partcount}
+RootDev=${ImgLodev}p${ThisRootPartNum}
 sayin new dev is ${RootDev} 
 
 sayin setup mounts
@@ -21,8 +22,7 @@ darkosreRootMnt=${tmpmnts}/root
 [[ ! -d "${darkosreBootMnt}" ]] && mkdir -p "${darkosreBootMnt}"
 [[ ! -d "${darkosreRootMnt}" ]] && mkdir -p "${darkosreRootMnt}"
 
-darkosrelodev=$(losetup -f)
-sudo losetup -P ${darkosrelodev} ${ThisImgName}
+darkosrelodev=$(sudo losetup -f --show -P ${ThisImgName})
 
 sudo mount ${darkosrelodev}p1 "${darkosreBootMnt}" || exit 1
 sudo mount ${darkosrelodev}p2 "${darkosreRootMnt}" || exit 1

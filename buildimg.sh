@@ -196,9 +196,10 @@ echo "bootsize is $bootsize"
 
 set -e
 
-say "make base image ${imgsize}MiB"
+say "make base image ${imgsize}MiB (sparse)"
 
-fallocate -l ${imgsize}MiB ${BuildingImgFullPath}
+# Use truncate instead of fallocate to create a sparse file (saves disk space in CI)
+truncate -s ${imgsize}M ${BuildingImgFullPath}
 
 # Use --show to get the device name while attaching
 ImgLodev=$(sudo losetup -f --show -P ${BuildingImgFullPath})
@@ -227,39 +228,32 @@ function newpart {
     
     refreshBuildimg
     
-    # In MBR, logical partitions start at p5
-    local new_part_num=$((partcount + 1))
-    if [[ $ptype == "logical" && $new_part_num -lt 5 ]]; then
-        new_part_num=5
-    fi
+    # Dynamically find the newest partition device
+    local target_dev=$(lsblk -nlp -o NAME "${ImgLodev}" | tail -n 1)
+    # Get just the number for partcount (e.g., from /dev/loop0p5 get 5)
+    partcount=$(echo "${target_dev}" | grep -oP '\d+$' | tail -n 1)
 
-    # Wait for device
-    for i in {1..5}; do
-        if [[ -e "${ImgLodev}p${new_part_num}" ]]; then break; fi
-        sleep 1
-    done
+    echo "► detected new partition: ${target_dev} (number: ${partcount})"
 
-    partcount=${new_part_num}
-    local target_dev="${ImgLodev}p${partcount}"
     nextpartstart=${end}
     [[ "$ptype" == "logical" ]] && nextpartstart=$((nextpartstart+1)) || true
 
     if [[ "$2" == "fat" ]]
     then
         echo "► format as fat with label ${3:-boot}"
-        sudo mkfs.vfat -F 32 ${3:+-n "$3"} "${target_dev}" >/dev/null 2>&1
+        sudo mkfs.vfat -F 32 ${3:+-n "$3"} "${target_dev}"
     fi
 
     if [[ "$2" == "exfat" ]]
     then
         echo "► format as exfat with label ${3:-storage}"
-        sudo mkfs.exfat ${3:+-L "$3"} "${target_dev}" >/dev/null 2>&1
+        sudo mkfs.exfat ${3:+-L "$3"} "${target_dev}"
     fi
 
     if [[ "$2" == "ext4" ]]
     then
         echo "► format as ext4 with label ${3:-root}"
-        sudo mkfs.ext4 ${3:+-L "$3"} "${target_dev}" >/dev/null 2>&1
+        sudo mkfs.ext4 ${3:+-L "$3"} "${target_dev}"
     fi
     sync
     [[ "$3" == "returndev" ]] && return "${target_dev}" || true

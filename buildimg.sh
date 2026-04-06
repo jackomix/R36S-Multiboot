@@ -373,10 +373,18 @@ Storagemount="${StartDir}/tmp/storage.tmpmnt"
 
 say "finalize image"
 sync
-sudo umount "${ImgBootMnt}"
+sudo umount "${ImgBootMnt}" || true
 [[ -d commonStoragefiles ]] && sudo umount "${Storagemount}" || true
-sudo kpartx -dv "${BuildingImgFullPath}"
-sudo losetup -d ${ImgLodev}
+
+# Clean up kpartx maps and loop device
+echo "► cleaning up partition maps"
+sudo kpartx -dv "${BuildingImgFullPath}" || true
+sudo udevadm settle || true
+
+# Only detach if it's still there
+if [[ -e "${ImgLodev}" ]]; then
+    sudo losetup -d "${ImgLodev}" || true
+fi
 sync
 
 if [[ "$BuildImgEnv" == "github" ]]; then

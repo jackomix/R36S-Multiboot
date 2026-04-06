@@ -43,14 +43,16 @@ jobs:
           BuildImgEnv: github
           GH_build_date: $(date +%Y%m%d)
         run: |
-          # We pass the OSes as arguments to the script
-          sudo ./buildimg.sh ${{ github.event.inputs.oses }}
+          # Use sudo -E to preserve environment variables for the script
+          sudo -E ./buildimg.sh ${{ github.event.inputs.oses }}
+          # Ensure artifacts are readable by the runner user
+          sudo chmod 644 *.img* *.7z* || true
 
       - name: Upload Image Artifact
         uses: actions/upload-artifact@v4
         with:
           name: R36S-Multiboot-Custom
           path: |
-            *.img.xz*
-            *.img.7z*
+            *.img*
+            *.7z*
           retention-days: 5

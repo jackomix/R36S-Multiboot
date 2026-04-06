@@ -403,11 +403,19 @@ sync
 if [[ "$BuildImgEnv" == "github" ]]
 then
     fallocate --dig-holes "${OutImg}"
-    sayin "compressing with xz (fast mode)"
-    xz -z -1 -T0 "${OutImg}"
-    sayin "splitting with 7z (store mode)"
+    echo "--- Compression Start: $(date) ---"
+    sayin "compressing with xz (fast mode, verbose progress)"
+    # Added -v for progress tracking in logs
+    xz -zv -1 -T0 "${OutImg}"
+    echo "--- Compression End: $(date) ---"
+
+    echo "--- Splitting Start: $(date) ---"
+    sayin "splitting with 7z (store mode, verbose)"
+    # 7z outputs progress to stdout by default; removed any potential silencers
     7z a -mx0 -v2000m "${OutImg7z}" "${OutImgXZ}"
-    ls "${StartDir}/${imgname}-*"
+    echo "--- Splitting End: $(date) ---"
+    
+    ls -lh "${StartDir}/${imgname}-*"
 fi
 
 sync

@@ -9,7 +9,7 @@ function check_deps {
             DEPS_MISSING=1
         fi
     done
-
+    
     if [[ $DEPS_MISSING -eq 1 ]]; then
         echo "Attempting to install missing dependencies..."
         if command -v apt-get >/dev/null 2>&1; then
@@ -53,7 +53,6 @@ function sayin {
 
 # --- TUI Configuration Phase ---
 
-# Find available OSes (directories with get-image.sh or bootbutton)
 AVAILABLE_OSES=()
 for d in */ ; do
     if [[ -f "${d}get-image.sh" || -f "${d}bootbutton" ]]; then
@@ -67,10 +66,8 @@ if [[ "$1" == "testoses" ]]; then
 elif [[ $# -gt 0 ]]; then
     SELECTED_OSES=("$@")
 elif [[ ! -t 0 ]]; then
-    # Non-interactive terminal with no args: default to standard OSes
     SELECTED_OSES=("andr36oid" "darkosre")
 else
-    # Whiptail Checklist for OS Selection
     CHECKLIST_ARGS=()
     for os in "${AVAILABLE_OSES[@]}"; do
         CHECKLIST_ARGS+=("$os" "Include $os" "OFF")
@@ -84,11 +81,9 @@ else
         echo "No OS selected. Exiting."
         exit 0
     fi
-    # Parse CSV into array (whiptail returns "os1" "os2")
     eval "SELECTED_OSES=($SELECTED_CSV)"
 fi
 
-# Define available buttons
 BUTTONS=(
     "b12" "Up"
     "b13" "Down"
@@ -102,10 +97,8 @@ BUTTONS=(
     "d9" "Select (-)"
 )
 
-# Configuration Phase for Buttons
 if [[ $# -eq 0 && "$1" != "testoses" && -t 0 ]]; then
     for os in "${SELECTED_OSES[@]}"; do
-        # Current button
         CURRENT_BTN="b7"
         if [[ -f "$os/bootbutton" ]]; then
             CURRENT_BTN=$(cat "$os/bootbutton" | tr -d '\r\n ')
@@ -134,6 +127,76 @@ say "Building image with OSes: ${SELECTED_OSES[@]}"
 
 # --- Build Phase ---
 
+PART_INDEX=0
+
+function refreshBuildimg {
+    sync
+    echo "► refreshing partitions on ${ImgLodev}"
+    sudo partprobe "${ImgLodev}" || true
+    sudo udevadm settle || true
+    sleep 2
+}
+
+function newpart {
+    local start=$nextpartstart
+    local partsize=$1
+    local end=$((start + partsize))
+    local ptype
+    
+    if [[ $PART_INDEX -eq 0 ]]; then
+        ptype=primary
+        PART_INDEX=1
+    else
+        ptype=logical
+        if [[ $PART_INDEX -lt 5 ]]; then
+            PART_INDEX=5
+        else
+            PART_INDEX=$((PART_INDEX + 1))
+        fi
+    fi
+
+    echo "► creating partition ${PART_INDEX} (${ptype}) from ${start}MiB to ${end}MiB"
+    [[ "$2" == "fat" ]] && local type=fat32 || local type=$2
+    [[ "$2" == "exfat" ]] && type=fat32
+
+    sudo parted -s ${ImgLodev} mkpart $ptype $type ${start}MiB ${end}MiB || true
+    refreshBuildimg
+    
+    partcount=$PART_INDEX
+    local target_dev="${ImgLodev}p${partcount}"
+    
+    # Wait for device node
+    for i in {1..5}; do
+        if [[ -e "${target_dev}" ]]; then break; fi
+        sleep 1
+    done
+
+    nextpartstart=${end}
+    [[ "$ptype" == "logical" ]] && nextpartstart=$((nextpartstart+1))
+
+    if [[ "$2" == "fat" ]]
+    then
+        local fat_label="${3:-boot}"
+        fat_label="${fat_label:0:11}"
+        echo "► format as fat with label ${fat_label}"
+        sudo mkfs.vfat -F 32 -n "${fat_label}" "${target_dev}"
+    fi
+
+    if [[ "$2" == "exfat" ]]
+    then
+        echo "► format as exfat with label ${3:-storage}"
+        sudo mkfs.exfat ${3:+-L "$3"} "${target_dev}"
+    fi
+
+    if [[ "$2" == "ext4" ]]
+    then
+        echo "► format as ext4 with label ${3:-root}"
+        sudo mkfs.ext4 ${3:+-L "$3"} "${target_dev}"
+    fi
+    sync
+    [[ "$3" == "returndev" ]] && return "${target_dev}" || true
+}
+
 u=$(id -u)
 g=$(id -g)
 imgname=R36S-Multiboot
@@ -158,13 +221,11 @@ done
 
 mkdir tmp
 
-partcount=0
 nextpartstart=16
 bootsize=48
 imgsizereq=32
 storagesize=24
 
-# shrink armbian sizes if building the big one
 if [[ "$BuildImgEnv" == "github" ]]
 then
     if echo "${SELECTED_OSES[@]}" | grep -qE "bookworm|jammy|noble|pluck"; then
@@ -175,20 +236,13 @@ fi
 
 for arg in "${SELECTED_OSES[@]}"; do
     thissizereq=0
-    if [[ -f "$arg/bootsizereq" ]]
-    then
-        thissizereq=$(cat "$arg/bootsizereq" | tr -d '\r\n ')
-        imgsizereq=$((imgsizereq + thissizereq))
-    fi
-    if [[ -f "$arg/sizereq" ]]
-    then
-        thissizereq=$(cat "$arg/sizereq" | tr -d '\r\n ')
-        imgsizereq=$((imgsizereq + thissizereq))
-    fi
+    [[ -f "$arg/bootsizereq" ]] && thissizereq=$(cat "$arg/bootsizereq" | tr -d '\r\n ') && imgsizereq=$((imgsizereq + thissizereq))
+    [[ -f "$arg/sizereq" ]] && thissizereq=$(cat "$arg/sizereq" | tr -d '\r\n ') && imgsizereq=$((imgsizereq + thissizereq))
+    [[ -f "$arg/datasizereq" ]] && thissizereq=$(cat "$arg/datasizereq" | tr -d '\r\n ') && imgsizereq=$((imgsizereq + thissizereq))
 done
 
 imgsizereq=$((storagesize + imgsizereq))
-imgsize=$((bootsize + imgsizereq + 16))
+imgsize=$((bootsize + imgsizereq + 128))
 
 echo "imgsize is $imgsize"
 echo "bootsize is $bootsize"
@@ -196,70 +250,10 @@ echo "bootsize is $bootsize"
 set -e
 
 say "make base image ${imgsize}MiB (sparse)"
-
-# Use truncate instead of fallocate to create a sparse file (saves disk space in CI)
 truncate -s ${imgsize}M ${BuildingImgFullPath}
 
-# Use --show to get the device name while attaching
 ImgLodev=$(sudo losetup -f --show -P ${BuildingImgFullPath})
 echo "Attached to $ImgLodev"
-
-function refreshBuildimg {
-    sync
-    echo "► refreshing partitions on ${ImgLodev}"
-    sudo partprobe "${ImgLodev}" || true
-    sudo udevadm settle || true
-    sleep 2
-}
-
-function newpart {
-    local start=$nextpartstart
-    local partsize=$1
-    local end=$((start + partsize))
-    local ptype=notset
-    echo "► create from ${start}MiB to ${end}MiB"
-    [[ "$2" == "fat" ]] && local type=fat32 || true
-    [[ "$2" == "ext4" ]] && local type=ext4 || true
-    [[ "$2" == "exfat" ]] && local type=fat32 || true
-
-    [[ $partcount == 0 ]] && ptype=primary || ptype=logical
-    sudo parted -s ${ImgLodev} mkpart $ptype $type ${start}MiB ${end}MiB || true
-    
-    refreshBuildimg
-    
-    # Dynamically find the newest partition device
-    local target_dev=$(lsblk -nlp -o NAME "${ImgLodev}" | tail -n 1)
-    # Get just the number for partcount (e.g., from /dev/loop0p5 get 5)
-    partcount=$(echo "${target_dev}" | grep -oP '\d+$' | tail -n 1)
-
-    echo "► detected new partition: ${target_dev} (number: ${partcount})"
-
-    nextpartstart=${end}
-    [[ "$ptype" == "logical" ]] && nextpartstart=$((nextpartstart+1)) || true
-
-    if [[ "$2" == "fat" ]]
-    then
-        # FAT labels are limited to 11 characters
-        local fat_label="${3:-boot}"
-        fat_label="${fat_label:0:11}"
-        echo "► format as fat with label ${fat_label}"
-        sudo mkfs.vfat -F 32 -n "${fat_label}" "${target_dev}"
-    fi
-
-    if [[ "$2" == "exfat" ]]
-    then
-        echo "► format as exfat with label ${3:-storage}"
-        sudo mkfs.exfat ${3:+-L "$3"} "${target_dev}"
-    fi
-
-    if [[ "$2" == "ext4" ]]
-    then
-        echo "► format as ext4 with label ${3:-root}"
-        sudo mkfs.ext4 ${3:+-L "$3"} "${target_dev}"
-    fi
-    sync
-    [[ "$3" == "returndev" ]] && return "${target_dev}" || true
-}
 
 if [[ ! -d u-boot ]]
 then
@@ -293,12 +287,11 @@ say "create boot partition"
 newpart ${bootsize} fat boot
 ImgBootMnt="${StartDir}/tmp/boot.tmpmnt"
 mkdir -p "${ImgBootMnt}"
-sudo mount ${ImgLodev}p${partcount} "${ImgBootMnt}"
+sudo mount ${ImgLodev}p1 "${ImgBootMnt}"
 sleep 3
 
 say "fill boot partition"
 sudo cp -R commonbootfiles/* "${ImgBootMnt}"
-
 sudo cp "${StartDir}/EZ/EZStorage_all.tar" "${ImgBootMnt}/EZStorage_all.tar"
 sudo cp "${StartDir}/EZ/setup-ezstorage.sh" "${ImgBootMnt}/setup-ezstorage.sh"
 
@@ -317,7 +310,7 @@ bootiniadd 'fi'
 bootiniadd ""
 for arg in "${SELECTED_OSES[@]}"; do
     if [[ -f "$arg/bootbutton" ]]; then
-        thisbtn=$(cat "$arg/bootbutton")
+        thisbtn=$(cat "$arg/bootbutton" | tr -d '\r\n ')
         bootiniadd "if gpio input $thisbtn"
         bootiniadd "then"
         bootiniadd "    setenv boot2 $arg"
@@ -338,10 +331,6 @@ bootiniadd 'mw.b 0x00800800 0 0x1000'
 bootiniadd 'load mmc 1:1 0x00800800 boot.${boot2}.ini'
 bootiniadd source 0x00800800
 
-echo
-cat "${ImgBootMnt}/boot.ini"
-
-# Setup Extended partition
 say "setup extended partition"
 sudo parted -s ${ImgLodev} mkpart extended ${nextpartstart}MiB 100%
 refreshBuildimg
@@ -371,7 +360,6 @@ for arg in "${SELECTED_OSES[@]}"; do
     cd "${StartDir}"
 done
 
-
 say "create storage partition"
 newpart 8 exfat EZSTORAGE
 Storagemount="${StartDir}/tmp/storage.tmpmnt"
@@ -392,8 +380,6 @@ fi
 OutImg=${StartDir}/${OutImgNameNoExt}.img
 OutImgXZ=${StartDir}/${OutImgNameNoExt}.img.xz
 OutImg7z=${StartDir}/${OutImgNameNoExt}.img.xz.7z
-
-echo "${OutImg}"
 
 mv ${BuildingImgFullPath} ${OutImg}
 sync

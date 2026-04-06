@@ -6,14 +6,14 @@ npsz=$(cat bootsizereq)
 sayin new $((npsz/1024))GiB partition
 newpart $npsz fat darkosboot
 ThisBootPartNum=${partcount}
-BootDev=${ImgLodev}p${ThisBootPartNum}
+BootDev=${LATEST_PART_DEV}
 sayin new dev is ${BootDev} 
 
 npsz=$(cat sizereq)
 sayin new $((npsz/1024))GiB partition
 newpart $npsz ext4 $OsName
 ThisRootPartNum=${partcount}
-RootDev=${ImgLodev}p${ThisRootPartNum}
+RootDev=${LATEST_PART_DEV}
 sayin new dev is ${RootDev} 
 
 sayin setup mounts

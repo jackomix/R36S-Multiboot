@@ -7,14 +7,14 @@ sayin new $((npsz/1024))GiB partition
 OsBootLabel=andboot
 newpart $npsz fat $OsBootLabel
 ThisBootPartNum=${partcount}
-ThisBootDev=${ImgLodev}p${ThisBootPartNum}
+ThisBootDev=${LATEST_PART_DEV}
 sayin new boot is ${ThisBootDev}
 
 npsz=$(cat sizereq)
 sayin new $((npsz/1024))GiB partition
 newpart $npsz ext4 androot
 ThisRootPartNum=${partcount}
-ThisRootDev=${ImgLodev}p${ThisRootPartNum}
+ThisRootDev=${LATEST_PART_DEV}
 sayin new root is ${ThisRootDev}
 
 # [[ -n "$AnDataSizeOverride" ]] && npsz=$AnDataSizeOverride || npsz=8192

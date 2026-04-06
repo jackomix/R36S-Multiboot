@@ -165,6 +165,10 @@ function newpart {
     
     local loop_base=$(basename "${ImgLodev}")
     local target_dev="/dev/mapper/${loop_base}p${PART_INDEX}"
+    
+    # Export for sourced scripts
+    partcount=$PART_INDEX
+    LATEST_PART_DEV=$target_dev
 
     # Wait for device node
     for i in {1..10}; do

@@ -3,7 +3,7 @@
 
 function check_deps {
     local DEPS_MISSING=0
-    for cmd in aria2c whiptail jq parted mkfs.exfat; do
+    for cmd in aria2c whiptail jq parted mkfs.exfat kpartx; do
         if ! command -v $cmd >/dev/null 2>&1; then
             echo "Missing dependency: $cmd"
             DEPS_MISSING=1
@@ -14,9 +14,9 @@ function check_deps {
         echo "Attempting to install missing dependencies..."
         if command -v apt-get >/dev/null 2>&1; then
             sudo apt-get update
-            sudo apt-get install -y aria2 whiptail jq parted p7zip-full exfatprogs
+            sudo apt-get install -y aria2 whiptail jq parted p7zip-full exfatprogs kpartx
         else
-            echo "Please manually install the missing dependencies: aria2, whiptail, jq, parted, p7zip, exfatprogs"
+            echo "Please manually install the missing dependencies: aria2, whiptail, jq, parted, p7zip, exfatprogs, kpartx"
             exit 1
         fi
     fi
@@ -131,16 +131,14 @@ PART_INDEX=0
 
 function refreshBuildimg {
     sync
-    echo "► refreshing partitions on ${ImgLodev}"
-    sudo partprobe "${ImgLodev}" || true
+    echo "► refreshing partition maps with kpartx"
+    sudo kpartx -av "${BuildingImgFullPath}" || true
     sudo udevadm settle || true
-    sleep 2
 }
 
 function newpart {
     local start=$nextpartstart
     local partsize=$1
-    local end=$((start + partsize))
     local ptype
     
     if [[ $PART_INDEX -eq 0 ]]; then
@@ -148,6 +146,8 @@ function newpart {
         PART_INDEX=1
     else
         ptype=logical
+        # Add 1MiB offset for Logical partitions to account for EBR and alignment
+        start=$((start + 1))
         if [[ $PART_INDEX -lt 5 ]]; then
             PART_INDEX=5
         else
@@ -155,24 +155,26 @@ function newpart {
         fi
     fi
 
+    local end=$((start + partsize))
     echo "► creating partition ${PART_INDEX} (${ptype}) from ${start}MiB to ${end}MiB"
     [[ "$2" == "fat" ]] && local type=fat32 || local type=$2
     [[ "$2" == "exfat" ]] && type=fat32
 
-    sudo parted -s ${ImgLodev} mkpart $ptype $type ${start}MiB ${end}MiB || true
+    sudo parted -s "${BuildingImgFullPath}" mkpart $ptype $type ${start}MiB ${end}MiB || true
     refreshBuildimg
     
-    partcount=$PART_INDEX
-    local target_dev="${ImgLodev}p${partcount}"
-    
+    local loop_base=$(basename "${ImgLodev}")
+    local target_dev="/dev/mapper/${loop_base}p${PART_INDEX}"
+
     # Wait for device node
-    for i in {1..5}; do
+    for i in {1..10}; do
         if [[ -e "${target_dev}" ]]; then break; fi
+        sudo kpartx -av "${BuildingImgFullPath}" >/dev/null
         sleep 1
     done
 
+    echo "► formatting ${target_dev}"
     nextpartstart=${end}
-    [[ "$ptype" == "logical" ]] && nextpartstart=$((nextpartstart+1))
 
     if [[ "$2" == "fat" ]]
     then
@@ -252,8 +254,8 @@ set -e
 say "make base image ${imgsize}MiB (sparse)"
 truncate -s ${imgsize}M ${BuildingImgFullPath}
 
-ImgLodev=$(sudo losetup -f --show -P ${BuildingImgFullPath})
-echo "Attached to $ImgLodev"
+ImgLodev=$(sudo losetup -f --show ${BuildingImgFullPath})
+echo "Base loop device: $ImgLodev"
 
 if [[ ! -d u-boot ]]
 then
@@ -281,13 +283,14 @@ chmod a+x ./sd_fusing.sh
 cd "${StartDir}"
 
 say "create partition table"
-sudo parted -s ${ImgLodev} mklabel msdos
+sudo parted -s "${BuildingImgFullPath}" mklabel msdos
 
 say "create boot partition"
 newpart ${bootsize} fat boot
 ImgBootMnt="${StartDir}/tmp/boot.tmpmnt"
 mkdir -p "${ImgBootMnt}"
-sudo mount ${ImgLodev}p1 "${ImgBootMnt}"
+loop_base=$(basename "${ImgLodev}")
+sudo mount "/dev/mapper/${loop_base}p1" "${ImgBootMnt}"
 sleep 3
 
 say "fill boot partition"
@@ -332,7 +335,7 @@ bootiniadd 'load mmc 1:1 0x00800800 boot.${boot2}.ini'
 bootiniadd source 0x00800800
 
 say "setup extended partition"
-sudo parted -s ${ImgLodev} mkpart extended ${nextpartstart}MiB 100%
+sudo parted -s "${BuildingImgFullPath}" mkpart extended ${nextpartstart}MiB 100%
 refreshBuildimg
 
 for arg in "${SELECTED_OSES[@]}"; do
@@ -368,6 +371,7 @@ say "finalize image"
 sync
 sudo umount "${ImgBootMnt}"
 [[ -d commonStoragefiles ]] && sudo umount "${Storagemount}" || true
+sudo kpartx -dv "${BuildingImgFullPath}"
 sudo losetup -d ${ImgLodev}
 sync
 
@@ -381,17 +385,17 @@ OutImg=${StartDir}/${OutImgNameNoExt}.img
 OutImgXZ=${StartDir}/${OutImgNameNoExt}.img.xz
 OutImg7z=${StartDir}/${OutImgNameNoExt}.img.xz.7z
 
-mv ${BuildingImgFullPath} ${OutImg}
+mv "${BuildingImgFullPath}" "${OutImg}"
 sync
 
 if [[ "$BuildImgEnv" == "github" ]]
 then
-    fallocate --dig-holes ${OutImg}
+    fallocate --dig-holes "${OutImg}"
     sayin "compressing with xz"
-    xz -z -7 -T0 ${OutImg}
+    xz -z -7 -T0 "${OutImg}"
     sayin "splitting with 7z"
-    7z a -mx9 -md512m -mfb273 -mmt2 -v2000m ${OutImg7z} ${OutImgXZ}
-    ls ${StartDir}/${imgname}-*
+    7z a -mx9 -md512m -mfb273 -mmt2 -v2000m "${OutImg7z}" "${OutImgXZ}"
+    ls "${StartDir}/${imgname}-*"
 fi
 
 sync

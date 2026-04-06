@@ -22,7 +22,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y aria2 whiptail jq parted p7zip-full xz-utils wget curl python3-pip megatools exfatprogs
+          sudo apt-get install -y aria2 whiptail jq parted p7zip-full xz-utils wget curl python3-pip megatools exfatprogs kpartx
           pip3 install gdown
 
       - name: Prepare Workspace

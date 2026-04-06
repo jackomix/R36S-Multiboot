@@ -11,6 +11,10 @@ on:
         description: 'Default Panel Number (for PanCho.ini)'
         required: true
         default: '4'
+      pixeldrain_api_key:
+        description: 'Pixeldrain API Key (Optional)'
+        required: false
+        default: ''
 
 jobs:
   build:
@@ -48,24 +52,23 @@ jobs:
           # Ensure artifacts are readable by the runner user
           sudo chmod 644 *.img* *.7z* || true
 
-      - name: Upload Image Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: R36S-Multiboot-Custom
-          path: |
-            *.img*
-            *.7z*
-          retention-days: 5
-
       - name: Upload to External Mirror (Pixeldrain)
         if: success()
         run: |
           echo "--- Starting External Uploads ---"
+          API_KEY="${{ github.event.inputs.pixeldrain_api_key }}"
+          AUTH_FLAG=""
+          if [ -n "$API_KEY" ]; then
+            # Use Basic Auth: curl -u :<api_key> ...
+            AUTH_FLAG="-u :$API_KEY"
+            echo "Using Pixeldrain API Key for authenticated upload..."
+          fi
+
           for f in R36S-Multiboot-*.img.xz* R36S-Multiboot-*.7z*; do
             if [ -f "$f" ]; then
               echo "Uploading $f to Pixeldrain..."
               # Upload and extract the ID from the JSON response
-              RESPONSE=$(curl -s -T "$f" https://pixeldrain.com/api/file/)
+              RESPONSE=$(curl -s $AUTH_FLAG -T "$f" https://pixeldrain.com/api/file/)
               ID=$(echo $RESPONSE | jq -r '.id')
               if [ "$ID" != "null" ]; then
                 echo "✅ $f uploaded successfully!"
@@ -77,3 +80,12 @@ jobs:
             fi
           done
           echo "--- External Uploads Complete ---"
+
+      - name: Upload Image Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: R36S-Multiboot-Custom
+          path: |
+            *.img*
+            *.7z*
+          retention-days: 5

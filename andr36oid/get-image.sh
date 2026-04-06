@@ -2,7 +2,7 @@
 
 # Fetch the latest lineage-*-r36s-android.img.zip from the root of andr36oid/release_uploads
 asset_url=$(curl -s "https://api.github.com/repos/andr36oid/release_uploads/contents/" \
-  | jq -r '[.[]] | select(.name | test("r36s-android.img.zip$")) | sort_by(.name) | reverse | .[0].download_url' \
+  | jq -r 'map(select(.name | test("r36s-android.img.zip$"))) | sort_by(.name) | reverse | .[0].download_url' \
   | head -n 1)
 
 if [[ ! -f "${ThisImgName}" ]]

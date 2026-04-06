@@ -14,20 +14,16 @@ then
     echo "Google Drive: ${gdrive_url}"
     echo "Mega: ${mega_url}"
     
-    # Try GDrive first since Torrent is often unseeded
+    # Priority: 1. GDrive, 2. Torrent (last resort)
     if [[ -n "$gdrive_url" ]] && command -v gdown >/dev/null 2>&1; then
         echo "Attempting to download via Google Drive (gdown)..."
         gdown "${gdrive_url}" -O "${ThisImgName}.7z"
     elif command -v aria2c >/dev/null 2>&1 && [[ -n "$torrent_url" ]]; then
-        echo "Attempting to download via aria2c (Torrent)..."
+        echo "Attempting to download via aria2c (Torrent - Last Resort)..."
         wget "$torrent_url" -O darkosre.torrent
-        aria2c --seed-time=0 darkosre.torrent
+        # Use --stop-with-process or a timeout to prevent getting stuck if no seeds
+        timeout 120s aria2c --seed-time=0 --on-download-complete=exit darkosre.torrent || echo "Torrent download timed out/failed."
         rm darkosre.torrent
-    else
-        echo "Automatic download failed. No seeded torrent or GDrive link found."
-        echo "Please download the image manually from the Mega/GDrive links above"
-        echo "and place it in this directory as ${ThisImgName}"
-        exit 1
     fi
 
     # Post-download processing (Shared between methods)

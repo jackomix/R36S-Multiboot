@@ -403,10 +403,10 @@ sync
 if [[ "$BuildImgEnv" == "github" ]]
 then
     fallocate --dig-holes "${OutImg}"
-    sayin "compressing with xz"
-    xz -z -7 -T0 "${OutImg}"
-    sayin "splitting with 7z"
-    7z a -mx9 -md512m -mfb273 -mmt2 -v2000m "${OutImg7z}" "${OutImgXZ}"
+    sayin "compressing with xz (fast mode)"
+    xz -z -1 -T0 "${OutImg}"
+    sayin "splitting with 7z (store mode)"
+    7z a -mx0 -v2000m "${OutImg7z}" "${OutImgXZ}"
     ls "${StartDir}/${imgname}-*"
 fi
 

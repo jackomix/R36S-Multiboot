@@ -56,3 +56,24 @@ jobs:
             *.img*
             *.7z*
           retention-days: 5
+
+      - name: Upload to External Mirror (Pixeldrain)
+        if: success()
+        run: |
+          echo "--- Starting External Uploads ---"
+          for f in R36S-Multiboot-*.img.xz* R36S-Multiboot-*.7z*; do
+            if [ -f "$f" ]; then
+              echo "Uploading $f to Pixeldrain..."
+              # Upload and extract the ID from the JSON response
+              RESPONSE=$(curl -s -T "$f" https://pixeldrain.com/api/file/)
+              ID=$(echo $RESPONSE | jq -r '.id')
+              if [ "$ID" != "null" ]; then
+                echo "✅ $f uploaded successfully!"
+                echo "🔗 Download Link: https://pixeldrain.com/u/$ID"
+              else
+                echo "❌ Failed to upload $f"
+                echo "Response: $RESPONSE"
+              fi
+            fi
+          done
+          echo "--- External Uploads Complete ---"

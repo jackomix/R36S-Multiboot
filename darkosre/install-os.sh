@@ -4,7 +4,7 @@ say Installing darkosre to ${imgname}
 
 npsz=$(cat bootsizereq)
 sayin new $((npsz/1024))GiB partition
-newpart $npsz fat ${OsName}boot
+newpart $npsz fat darkosboot
 ThisBootPartNum=${partcount}
 BootDev=${ImgLodev}p${ThisBootPartNum}
 sayin new dev is ${BootDev} 

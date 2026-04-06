@@ -1,6 +1,6 @@
 LABEL=darkosre       /  ext4  defaults,noatime  0 1
 
-LABEL=darkosreboot   /boot vfat defaults 0 2
+LABEL=darkosboot     /boot vfat defaults 0 2
 LABEL=boot          /boot/u-boot vfat defaults 0 2
 
 LABEL=EZSTORAGE     /EZSTORAGE  exfat defaults,auto,umask=000,uid=1002,gid=1002,noatime 0 0

@@ -240,8 +240,11 @@ function newpart {
 
     if [[ "$2" == "fat" ]]
     then
-        echo "► format as fat with label ${3:-boot}"
-        sudo mkfs.vfat -F 32 ${3:+-n "$3"} "${target_dev}"
+        # FAT labels are limited to 11 characters
+        local fat_label="${3:-boot}"
+        fat_label="${fat_label:0:11}"
+        echo "► format as fat with label ${fat_label}"
+        sudo mkfs.vfat -F 32 -n "${fat_label}" "${target_dev}"
     fi
 
     if [[ "$2" == "exfat" ]]

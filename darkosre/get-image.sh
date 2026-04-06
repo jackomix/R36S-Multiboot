@@ -14,10 +14,13 @@ then
     echo "Google Drive: ${gdrive_url}"
     echo "Mega: ${mega_url}"
     
-    # Priority: 1. GDrive, 2. Torrent (last resort)
+    # Priority: 1. GDrive, 2. Mega, 3. Torrent (last resort)
     if [[ -n "$gdrive_url" ]] && command -v gdown >/dev/null 2>&1; then
         echo "Attempting to download via Google Drive (gdown)..."
         gdown "${gdrive_url}" -O "${ThisImgName}.7z"
+    elif [[ -n "$mega_url" ]] && command -v megadl >/dev/null 2>&1; then
+        echo "Attempting to download via Mega (megadl)..."
+        megadl "${mega_url}" --path "${ThisImgName}.7z"
     elif command -v aria2c >/dev/null 2>&1 && [[ -n "$torrent_url" ]]; then
         echo "Attempting to download via aria2c (Torrent - Last Resort)..."
         wget "$torrent_url" -O darkosre.torrent

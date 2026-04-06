@@ -341,16 +341,10 @@ bootiniadd source 0x00800800
 echo
 cat "${ImgBootMnt}/boot.ini"
 
-# need to setup extended part now that were mbr
-epartstart=$nextpartstart
-while true
-do
-    epartstart=$((epartstart+1))
-    sudo parted -s ${ImgLodev} mkpart extended $epartstart 100% 2>&1 | grep "The closest location we can manage is" >/dev/null 2>&1 && continue || echo "epart at $epartstart"
-    partcount=$((partcount+3))
-    nextpartstart=$((nextpartstart+1))
-    break
-done
+# Setup Extended partition
+say "setup extended partition"
+sudo parted -s ${ImgLodev} mkpart extended ${nextpartstart}MiB 100%
+refreshBuildimg
 
 for arg in "${SELECTED_OSES[@]}"; do
     OsName=${arg}

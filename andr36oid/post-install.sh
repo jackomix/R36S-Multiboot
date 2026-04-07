@@ -117,18 +117,8 @@ sudo losetup -d ${Thislodev}
 # if [[ "$@" == *"andr36oid"* ]] 
 # then
 
-
-
     sayin add android data partition
-    sync
-    sudo umount "${ImgBootMnt}"
-    [[ -n "$AnDataSizeOverride" ]] && imgsize=$((imgsize + AnDataSizeOverride)) || imgsize=$((imgsize + 8192))
-    sudo losetup -d $ImgLodev
-    fallocate -l ${imgsize}MiB ${BuildingImgFullPath}
-    sync
-    sudo losetup -P ${ImgLodev} ${BuildingImgFullPath}
-    sudo parted -s ${ImgLodev} resizepart 2 100%
-    sudo mount ${ImgLodev}p1 "${ImgBootMnt}"
+    # Logic handled by main builder now
     [[ -n "$AnDataSizeOverride" ]] && npsz=$AnDataSizeOverride || npsz=8192
     sayin new $((npsz/1024))GiB partition
     newpart $npsz ext4 andata

@@ -1,9 +1,8 @@
 #!/bin/bash
 
-# --- dArkOSre (March 2026) ---
-OS_NAME="darkosre"
-# install-os.sh expects $ThisImgName which buildimg.sh sets to ${OsName}.img
-TARGET_IMG="${OS_NAME}.img"
+# --- dArkOSre (March 2026) - Replacing ArkOS ---
+OS_NAME="ark"
+TARGET_IMG="ark.img"
 IMAGE_NAME="dArkOSRE_R36_trixie_03082026.img"
 MEGA_URL="https://mega.nz/file/k6AgTSTS#RrMGot_xVXyzAr5h_7RDNKFIv2GaKniLYliLSPA3UWc"
 GDRIVE_ID="1ONnNxR3cpGAC0d5YefS-xE-Hp1ph7Hm-"

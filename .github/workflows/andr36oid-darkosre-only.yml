@@ -55,7 +55,7 @@ jobs:
         run: |
           export BuildImgEnv=github
           export GH_build_date=${{ needs.get_build_date.outputs.build_date }}
-          export NewOSList="andr36oid darkosre"
+          export NewOSList="andr36oid ark"
           chmod a+x ./buildimg.sh
           export ghdebug=${{ inputs.debug }}
           ./buildimg.sh $NewOSList

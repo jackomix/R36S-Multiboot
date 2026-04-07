@@ -1,26 +1,54 @@
 #!/bin/bash
 
-if [[ ! -f "$ThisImgName" ]]
-then
-    ArkOSdl=https://github.com/AeolusUX/ArkOS-R3XS/releases/download/ArkOS.V2.0.06302025/ArkOS_R35S-R36S_v2.0_06302025_MultiPanel.img.7z
-    [[ -f "ArkOS_R35S-R36S.img.7z.001" ]] && rm ArkOS_R35S-R36S.img.7z.001 || echo >/dev/null 2>&1
-    [[ -f "ArkOS_R35S-R36S.img.7z" ]] && rm ArkOS_R35S-R36S.img.7z || echo >/dev/null 2>&1
-    [[ -f "ArkOS_R35S-R36S.img" ]] && rm ArkOS_R35S-R36S.img || echo >/dev/null 2>&1
-    rm ArkOS_R35S-R36S_*.img || true
-    ArkOSdl1=${ArkOSdl}.001
-    #echo $ArkOSdl1
-    echo "Downloading ArkOS R35S-R36S image..."
-    wget --no-verbose --quiet -OArkOS_R35S-R36S.img.7z.001 "$ArkOSdl1"
+# --- dArkOSre (March 2026) ---
+OS_NAME="darkosre"
+# install-os.sh expects $ThisImgName which buildimg.sh sets to ${OsName}.img
+TARGET_IMG="${OS_NAME}.img"
+IMAGE_NAME="dArkOSRE_R36_trixie_03082026.img"
+MEGA_URL="https://mega.nz/file/k6AgTSTS#RrMGot_xVXyzAr5h_7RDNKFIv2GaKniLYliLSPA3UWc"
+GDRIVE_ID="1ONnNxR3cpGAC0d5YefS-xE-Hp1ph7Hm-"
 
-    [[ -f "ArkOS_R35S-R36S.img.7z.002" ]] && rm ArkOS_R35S-R36S.img.7z.002
-    ArkOSdl2=${ArkOSdl}.002
-    #echo $ArkOSdl2
-    wget --no-verbose --quiet -OArkOS_R35S-R36S.img.7z.002 "$ArkOSdl2"
-    7z x -aoa ArkOS_R35S-R36S.img.7z.001
-    rm ArkOS_R35S-R36S.img.7z.001 ArkOS_R35S-R36S.img.7z.002
-    sync
-    arkImg=$(find . |grep "ArkOS_R35S-R36S")
-    unxz -T0 --force --decompress $arkImg
-    arkImg=$(find . |grep "ArkOS_R35S-R36S")
-    mv ${arkImg} ${ThisImgName}
+if [[ -f "../${IMAGE_NAME}" ]]; then
+    echo "Using local image: ${IMAGE_NAME}"
+    cp "../${IMAGE_NAME}" "${TARGET_IMG}"
+else
+    echo "Downloading ${OS_NAME}..."
+    if command -v megadl >/dev/null 2>&1; then
+        megadl "${MEGA_URL}" --path .
+    else
+        echo "megadl not found, trying Google Drive..."
+        wget --load-cookies /tmp/cookies.txt "https://docs.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://docs.google.com/uc?export=download&id='${GDRIVE_ID} -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=${GDRIVE_ID}" -O "${IMAGE_NAME}.7z" && rm -rf /tmp/cookies.txt
+    fi
 fi
+
+# Extract if needed
+if [[ -f "${IMAGE_NAME}.7z" ]]; then
+    echo "Extracting 7z..."
+    7z x "${IMAGE_NAME}.7z" -y
+    rm "${IMAGE_NAME}.7z"
+elif [[ -f "dArkOSRE_R36_trixie_03082026.7z" ]]; then
+    echo "Extracting 7z..."
+    7z x "dArkOSRE_R36_trixie_03082026.7z" -y
+    rm "dArkOSRE_R36_trixie_03082026.7z"
+fi
+
+# Rename to the target name expected by buildimg.sh/install-os.sh
+if [[ -f "${IMAGE_NAME}" ]]; then
+    mv "${IMAGE_NAME}" "${TARGET_IMG}"
+fi
+
+if [[ ! -f "${TARGET_IMG}" ]]; then
+    # Fallback: check if it extracted with a slightly different name
+    EXTRACTED=$(ls *.img 2>/dev/null | grep -v "${TARGET_IMG}" | head -n 1)
+    if [[ -n "$EXTRACTED" ]]; then
+        mv "$EXTRACTED" "${TARGET_IMG}"
+    fi
+fi
+
+if [[ ! -f "${TARGET_IMG}" ]]; then
+    echo "Error: Failed to find target image ${TARGET_IMG}"
+    ls -la
+    exit 1
+fi
+
+echo "Image ready: ${TARGET_IMG}"

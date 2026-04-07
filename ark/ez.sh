@@ -3,7 +3,7 @@
 if [[ ! "$1" == "justEZ2" ]]
 then
     echo -ne "Setting up EZSTORAGE" >>/dev/tty1
-    /bin/bash /boot/u-boot/setup-ezstorage.sh ark /roms /EZSTORAGE || exit 1
+    /bin/bash /boot/u-boot/setup-ezstorage.sh darkosre /roms /EZSTORAGE || exit 1
 fi
 
 IntDev=$(mount |grep "/boot "| cut -d' ' -f1 | cut -dp -f1)
@@ -19,7 +19,7 @@ then
     if mount /EZSTORAGE2
     then
         echo -ne "Setting up EZSTORAGE2" >>/dev/tty1
-        /bin/bash /boot/u-boot/setup-ezstorage.sh ark /roms2 /EZSTORAGE2 || exit 1
+        /bin/bash /boot/u-boot/setup-ezstorage.sh darkosre /roms2 /EZSTORAGE2 || exit 1
     fi
 fi
 

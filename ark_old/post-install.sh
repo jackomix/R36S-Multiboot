@@ -1,14 +1,16 @@
 #!/bin/bash
-say Post-installing darkosre to ${imgname}
+say Post-installing ark to ${imgname}
 
 sayin copy firstrun script
 sudo cp -vL "firstboot.sh" "${BootDestMnt}"
-sudo cp "darkosre-firstrun.sh" "${BootDestMnt}"
+sudo cp "ark-firstrun.sh" "${BootDestMnt}"
+# sudo cp -vL umount-ez.sh "${BootDestMnt}"
 
 sayin copy fstab
-sudo cp -vL --remove-destination "darkosre.fstab" "${RootDestMnt}/etc/fstab"
+sudo cp -vL --remove-destination "ark.fstab" "${RootDestMnt}/etc/fstab"
 sudo rm -f "${RootDestMnt}/etc/fstab.ntfs"
 sudo cp -vL "ez.service" "${RootDestMnt}/etc/systemd/system/ez.service"
+#sudo ln -s "/etc/systemd/system/ez.service" "${RootDestMnt}/etc/systemd/system/multi-user.target.wants/ez.service"
 
 sudo cp -v "ez.sh" "${RootDestMnt}/usr/local/sbin/ez.sh"
 sudo chmod a+x "${RootDestMnt}/usr/local/sbin/ez.sh"
@@ -35,15 +37,22 @@ GOTO="exit"
 LABEL="exit"
 EOF
 
+
+
+
+
+
+
+
 sayin cleanup mounts and img dev
 sync
 sleep 5
-sudo umount ${darkosrelodev}p1
-sudo umount ${darkosrelodev}p2
+sudo umount ${arklodev}p1
+sudo umount ${arklodev}p2
 sudo umount ${BootDev}
 sudo umount ${RootDev}
 
 sync
-sudo losetup -d ${darkosrelodev}
+sudo losetup -d ${arklodev}
 
 [[ "$BuildImgEnv" == "github" ]] && rm ${ThisImgName} || sayin keep ${ThisImgName}

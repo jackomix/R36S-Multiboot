@@ -12,18 +12,37 @@ if [[ -f "../${IMAGE_NAME}" ]]; then
 else
     echo "Downloading ${OS_NAME}..."
     if command -v megadl >/dev/null 2>&1; then
+        # megadl downloads with the name from the server
         megadl "${MEGA_URL}" --path .
     else
         echo "megadl not found, trying Google Drive..."
-        # Using a simple wget strategy for GDrive files (works for public files under 100MB usually, 
-        # but for larger ones we need to handle the confirmation cookie)
-        wget --load-cookies /tmp/cookies.txt "https://docs.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://docs.google.com/uc?export=download&id='${GDRIVE_ID} -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=${GDRIVE_ID}" -O "${IMAGE_NAME}" && rm -rf /tmp/cookies.txt
+        wget --load-cookies /tmp/cookies.txt "https://docs.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://docs.google.com/uc?export=download&id='${GDRIVE_ID} -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=${GDRIVE_ID}" -O "${IMAGE_NAME}.7z" && rm -rf /tmp/cookies.txt
+    fi
+fi
+
+# Extract if needed
+if [[ -f "${IMAGE_NAME}.7z" ]]; then
+    echo "Extracting 7z..."
+    7z x "${IMAGE_NAME}.7z" -y
+    rm "${IMAGE_NAME}.7z"
+elif [[ -f "dArkOSRE_R36_trixie_03082026.7z" ]]; then
+    echo "Extracting 7z..."
+    7z x "dArkOSRE_R36_trixie_03082026.7z" -y
+    rm "dArkOSRE_R36_trixie_03082026.7z"
+fi
+
+if [[ ! -f "${IMAGE_NAME}" ]]; then
+    # Fallback: check if it extracted with a slightly different name
+    EXTRACTED=$(ls *.img 2>/dev/null | head -n 1)
+    if [[ -n "$EXTRACTED" && "$EXTRACTED" != "${IMAGE_NAME}" ]]; then
+        mv "$EXTRACTED" "${IMAGE_NAME}"
     fi
 fi
 
 if [[ ! -f "${IMAGE_NAME}" ]]; then
-    echo "Error: Failed to download ${IMAGE_NAME}"
+    echo "Error: Failed to download or extract ${IMAGE_NAME}"
+    ls -la
     exit 1
 fi
 
-echo "Image downloaded: ${IMAGE_NAME}"
+echo "Image ready: ${IMAGE_NAME}"

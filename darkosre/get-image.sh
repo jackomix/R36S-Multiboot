@@ -2,17 +2,18 @@
 
 # --- dArkOSre (March 2026) ---
 OS_NAME="darkosre"
+# install-os.sh expects $ThisImgName which buildimg.sh sets to ${OsName}.img
+TARGET_IMG="${OS_NAME}.img"
 IMAGE_NAME="dArkOSRE_R36_trixie_03082026.img"
 MEGA_URL="https://mega.nz/file/k6AgTSTS#RrMGot_xVXyzAr5h_7RDNKFIv2GaKniLYliLSPA3UWc"
 GDRIVE_ID="1ONnNxR3cpGAC0d5YefS-xE-Hp1ph7Hm-"
 
 if [[ -f "../${IMAGE_NAME}" ]]; then
     echo "Using local image: ${IMAGE_NAME}"
-    cp "../${IMAGE_NAME}" .
+    cp "../${IMAGE_NAME}" "${TARGET_IMG}"
 else
     echo "Downloading ${OS_NAME}..."
     if command -v megadl >/dev/null 2>&1; then
-        # megadl downloads with the name from the server
         megadl "${MEGA_URL}" --path .
     else
         echo "megadl not found, trying Google Drive..."
@@ -31,18 +32,23 @@ elif [[ -f "dArkOSRE_R36_trixie_03082026.7z" ]]; then
     rm "dArkOSRE_R36_trixie_03082026.7z"
 fi
 
-if [[ ! -f "${IMAGE_NAME}" ]]; then
+# Rename to the target name expected by buildimg.sh/install-os.sh
+if [[ -f "${IMAGE_NAME}" ]]; then
+    mv "${IMAGE_NAME}" "${TARGET_IMG}"
+fi
+
+if [[ ! -f "${TARGET_IMG}" ]]; then
     # Fallback: check if it extracted with a slightly different name
-    EXTRACTED=$(ls *.img 2>/dev/null | head -n 1)
-    if [[ -n "$EXTRACTED" && "$EXTRACTED" != "${IMAGE_NAME}" ]]; then
-        mv "$EXTRACTED" "${IMAGE_NAME}"
+    EXTRACTED=$(ls *.img 2>/dev/null | grep -v "${TARGET_IMG}" | head -n 1)
+    if [[ -n "$EXTRACTED" ]]; then
+        mv "$EXTRACTED" "${TARGET_IMG}"
     fi
 fi
 
-if [[ ! -f "${IMAGE_NAME}" ]]; then
-    echo "Error: Failed to download or extract ${IMAGE_NAME}"
+if [[ ! -f "${TARGET_IMG}" ]]; then
+    echo "Error: Failed to find target image ${TARGET_IMG}"
     ls -la
     exit 1
 fi
 
-echo "Image ready: ${IMAGE_NAME}"
+echo "Image ready: ${TARGET_IMG}"

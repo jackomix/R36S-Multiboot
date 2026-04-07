@@ -394,26 +394,27 @@ else
 fi
 
 OutImg=${StartDir}/${OutImgNameNoExt}.img
-OutImgXZ=${StartDir}/${OutImgNameNoExt}.img.xz
-OutImg7z=${StartDir}/${OutImgNameNoExt}.img.xz.7z
+OutImgXZ=${OutImg}.xz
+OutImg7z=${OutImgXZ}.7z
 
 mv "${BuildingImgFullPath}" "${OutImg}"
 sync
 
 if [[ "$BuildImgEnv" == "github" ]]
 then
-    fallocate --dig-holes "${OutImg}"
+    # Use cp --sparse=always to avoid fallocate issues in some environments
+    cp --sparse=always "${OutImg}" "${OutImg}.sparse"
+    mv "${OutImg}.sparse" "${OutImg}"
+    
     echo "--- Compression Start: $(date) ---"
-    sayin "compressing with xz (fast mode, pv progress)"
-    # Use pv to show progress in logs. It shows throughput and percentage.
-    pv "${OutImg}" | xz -z -1 -T0 > "${OutImgXZ}"
-    # Remove raw img to save space in CI
-    rm "${OutImg}"
+    sayin "compressing with xz (fast mode)"
+    xz -1 -T0 "${OutImg}"
+    # xz -1 -T0 replaces OutImg with OutImg.xz
     echo "--- Compression End: $(date) ---"
 
     echo "--- Splitting Start: $(date) ---"
-    sayin "splitting with 7z (store mode, verbose)"
-    # -bsp1 redirects progress to stdout for CI logs
+    sayin "splitting with 7z (store mode)"
+    # 7z will create .7z.001, .7z.002, etc. if it splits, or just .7z if it doesn't.
     7z a -mx0 -v2000m -bsp1 "${OutImg7z}" "${OutImgXZ}"
     echo "--- Splitting End: $(date) ---"
     

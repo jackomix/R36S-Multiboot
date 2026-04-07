@@ -4,6 +4,10 @@ name: release them all BWUAHAHAHAH
 on:
   workflow_dispatch:
     inputs:
+      pixeldrain_api_key:
+        description: 'Pixeldrain API Key'
+        required: false
+        default: ''
       debug:
         description: 'debug'
         required: true
@@ -237,5 +241,15 @@ jobs:
           body: |
             # [Download Images Here](https://${{ github.repository_owner }}.github.io/R36S-Multiboot/)
             (https://${{ github.repository_owner }}.github.io/R36S-Multiboot)
+
+      - name: Upload to Pixeldrain
+        if: always() && inputs.pixeldrain_api_key != ''
+        run: |
+          for file in R36S-Multiboot-*.img.xz.7z.*; do
+            if [ -f "$file" ]; then
+              echo "Uploading $file to Pixeldrain..."
+              curl -u ":${{ inputs.pixeldrain_api_key }}" -F "file=@$file" https://pixeldrain.com/api/file
+            fi
+          done
 
 
